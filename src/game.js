@@ -49,9 +49,13 @@ function showToast(msg, type = 'info', duration = 2500) {
 
 // ── SOCKET SETUP ───────────────────────────────────────────────
 function connectSocket() {
-  // In dev: Vite proxies socket.io to localhost:3001
-  // On GitHub Pages: VITE_SOCKET_URL points to the Render backend
-  const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin;
+  // Dev: Vite proxies to localhost:3001
+  // GitHub Pages: must connect to the Render backend explicitly
+  // Render full-stack: connects to same origin
+  const SOCKET_URL = import.meta.env.VITE_SOCKET_URL
+    || (window.location.hostname.includes('github.io')
+        ? 'https://wordle-09cj.onrender.com'
+        : window.location.origin);
   const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
   state.socket = socket;
 
