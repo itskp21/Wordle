@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wordle Duel — Real-Time Multiplayer Wordle</title>
+  <meta name="description" content="Race your friend to guess the word first in this real-time multiplayer Wordle game. No account needed — just share a link!" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 1: LOBBY
+  ══════════════════════════════════════════ -->
+  <div id="screen-lobby" class="screen active">
+    <div class="lobby-bg">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
+      <div class="orb orb-3"></div>
+    </div>
+
+    <div class="lobby-content">
+      <div class="logo-wrap">
+        <div class="logo-tiles">
+          <div class="logo-tile correct">W</div>
+          <div class="logo-tile present">O</div>
+          <div class="logo-tile absent">R</div>
+          <div class="logo-tile correct">D</div>
+          <div class="logo-tile present">L</div>
+        </div>
+        <h1 class="logo-title">Wordle <span class="logo-accent">Duel</span></h1>
+        <p class="logo-subtitle">Race your friend to guess the word first</p>
+      </div>
+
+      <div class="lobby-card glass">
+        <div class="nickname-group">
+          <label for="nickname-input" class="input-label">Your nickname</label>
+          <input
+            id="nickname-input"
+            type="text"
+            class="text-input"
+            placeholder="e.g. WordMaster"
+            maxlength="20"
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="lobby-actions">
+          <button id="btn-create" class="btn btn-primary btn-large">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            Create Room
+          </button>
+
+          <div class="divider"><span>or</span></div>
+
+          <div class="join-row">
+            <input
+              id="room-code-input"
+              type="text"
+              class="text-input code-input"
+              placeholder="Enter room code"
+              maxlength="6"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button id="btn-join" class="btn btn-secondary">
+              Join
+            </button>
+          </div>
+
+          <div id="join-error" class="error-msg" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <p class="lobby-hint">🔒 No account needed. Just share the link!</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 2: WAITING ROOM
+  ══════════════════════════════════════════ -->
+  <div id="screen-waiting" class="screen">
+    <div class="waiting-content">
+      <div class="waiting-icon">
+        <div class="pulse-ring"></div>
+        <div class="pulse-ring pulse-ring-2"></div>
+        <span class="waiting-emoji">⚔️</span>
+      </div>
+      <h2 class="waiting-title">Waiting for opponent…</h2>
+      <p class="waiting-sub">Share this room code with your friend</p>
+
+      <div class="room-code-display">
+        <span id="display-room-code" class="room-code-text">------</span>
+      </div>
+
+      <button id="btn-copy-link" class="btn btn-primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span id="copy-btn-text">Copy Invite Link</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 3: COUNTDOWN
+  ══════════════════════════════════════════ -->
+  <div id="screen-countdown" class="screen">
+    <div class="countdown-content">
+      <p class="countdown-label">Game starts in</p>
+      <div id="countdown-number" class="countdown-number">3</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 4: GAME
+  ══════════════════════════════════════════ -->
+  <div id="screen-game" class="screen">
+
+    <!-- Header -->
+    <header class="game-header">
+      <div class="header-logo">
+        <span class="header-logo-text">Wordle <span class="logo-accent">Duel</span></span>
+      </div>
+      <div class="header-timer" id="game-timer">0:00</div>
+      <div class="header-room">
+        <span class="room-badge" id="header-room-code">Room: ------</span>
+      </div>
+    </header>
+
+    <!-- Boards -->
+    <main class="game-arena">
+      <!-- My Board -->
+      <section class="board-panel" id="my-panel">
+        <div class="panel-header">
+          <div class="player-tag you">
+            <div class="player-dot"></div>
+            <span id="my-name">You</span>
+          </div>
+          <div class="guess-counter" id="my-guess-count">0 / 6</div>
+        </div>
+        <div class="board" id="my-board" role="grid" aria-label="Your guesses"></div>
+      </section>
+
+      <!-- VS Divider -->
+      <div class="vs-divider">
+        <div class="vs-line"></div>
+        <span class="vs-text">VS</span>
+        <div class="vs-line"></div>
+      </div>
+
+      <!-- Opponent Board -->
+      <section class="board-panel" id="opponent-panel">
+        <div class="panel-header">
+          <div class="player-tag opponent">
+            <div class="player-dot"></div>
+            <span id="opponent-name">Opponent</span>
+          </div>
+          <div class="guess-counter" id="opp-guess-count">0 / 6</div>
+        </div>
+        <div class="board" id="opp-board" role="grid" aria-label="Opponent guesses"></div>
+        <div class="opp-overlay">Watching live <span class="live-dot"></span></div>
+      </section>
+    </main>
+
+    <!-- Current guess display (mobile above keyboard) -->
+    <div class="current-guess-bar" id="current-guess-bar" aria-live="polite"></div>
+
+    <!-- Keyboard -->
+    <div class="keyboard" id="keyboard" role="group" aria-label="Letter keyboard">
+      <div class="keyboard-row" data-row="0">
+        <button class="key" data-key="Q">Q</button>
+        <button class="key" data-key="W">W</button>
+        <button class="key" data-key="E">E</button>
+        <button class="key" data-key="R">R</button>
+        <button class="key" data-key="T">T</button>
+        <button class="key" data-key="Y">Y</button>
+        <button class="key" data-key="U">U</button>
+        <button class="key" data-key="I">I</button>
+        <button class="key" data-key="O">O</button>
+        <button class="key" data-key="P">P</button>
+      </div>
+      <div class="keyboard-row" data-row="1">
+        <button class="key" data-key="A">A</button>
+        <button class="key" data-key="S">S</button>
+        <button class="key" data-key="D">D</button>
+        <button class="key" data-key="F">F</button>
+        <button class="key" data-key="G">G</button>
+        <button class="key" data-key="H">H</button>
+        <button class="key" data-key="J">J</button>
+        <button class="key" data-key="K">K</button>
+        <button class="key" data-key="L">L</button>
+      </div>
+      <div class="keyboard-row" data-row="2">
+        <button class="key key-wide" data-key="ENTER">Enter</button>
+        <button class="key" data-key="Z">Z</button>
+        <button class="key" data-key="X">X</button>
+        <button class="key" data-key="C">C</button>
+        <button class="key" data-key="V">V</button>
+        <button class="key" data-key="B">B</button>
+        <button class="key" data-key="N">N</button>
+        <button class="key" data-key="M">M</button>
+        <button class="key key-wide" data-key="BACKSPACE">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 5: RESULT OVERLAY
+  ══════════════════════════════════════════ -->
+  <div id="screen-result" class="screen result-overlay">
+    <div class="result-card glass">
+      <div id="result-icon" class="result-icon">🏆</div>
+      <h2 id="result-title" class="result-title">You won!</h2>
+      <p id="result-subtitle" class="result-subtitle">Great guessing!</p>
+
+      <div class="result-word-reveal">
+        <span class="result-word-label">The word was</span>
+        <div id="result-word" class="result-word"></div>
+      </div>
+
+      <div class="result-stats">
+        <div class="stat-box">
+          <span class="stat-value" id="stat-my-guesses">—</span>
+          <span class="stat-label">Your guesses</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-value" id="stat-opp-guesses">—</span>
+          <span class="stat-label">Their guesses</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-value" id="stat-time">—</span>
+          <span class="stat-label">Your time</span>
+        </div>
+      </div>
+
+      <div class="result-actions">
+        <button id="btn-rematch" class="btn btn-primary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.05"/></svg>
+          Rematch
+        </button>
+        <button id="btn-share-result" class="btn btn-secondary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Share Result
+        </button>
+      </div>
+
+      <div id="rematch-status" class="rematch-status"></div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       DISCONNECT TOAST
+  ══════════════════════════════════════════ -->
+  <div id="toast" class="toast" role="alert" aria-live="assertive"></div>
+
+  <!-- Canvas for confetti -->
+  <canvas id="confetti-canvas" style="position:fixed;inset:0;pointer-events:none;z-index:9999;"></canvas>
+
+  <script type="module" src="/src/game.js"></script>
+</body>
+</html>
