@@ -126,14 +126,17 @@ const EXTRA_VALID = [
   "WIMPY","WINCH","WITTY","WOOZY","WORDY","WOOZY","YUCKY","ZAPPY","ZIPPY","ZOMBIE"
 ];
 
-const ALL_VALID = [...new Set([...ANSWERS, ...EXTRA_VALID])];
+const englishWords = require('an-array-of-english-words');
+const fiveLetterWords = englishWords.filter(w => w.length === 5).map(w => w.toUpperCase());
+
+const ALL_VALID = new Set([...ANSWERS, ...EXTRA_VALID, ...fiveLetterWords]);
 
 function getRandomWord() {
   return ANSWERS[Math.floor(Math.random() * ANSWERS.length)];
 }
 
 function isValidWord(word) {
-  return ALL_VALID.includes(word.toUpperCase());
+  return ALL_VALID.has(word.toUpperCase());
 }
 
 module.exports = { getRandomWord, isValidWord, ANSWERS };

@@ -555,7 +555,7 @@ body {
 /* Board */
 .board {
   display: grid;
-  grid-template-rows: repeat(6, var(--tile-size));
+  grid-template-rows: repeat(5, var(--tile-size));
   grid-template-columns: repeat(5, var(--tile-size));
   gap: var(--tile-gap);
 }

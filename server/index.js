@@ -76,62 +76,58 @@ function startCountdown(room) {
 }
 
 function checkGameOver(room) {
-  const { players, solved, guesses, word, code } = room;
-  if (players.length < 2) return;
+  const { code, word, guesses, solved } = room;
+  // In challenge mode, there is only one guesser.
+  const isSolved = solved === true;
+  const isExhausted = guesses.length >= 5;
 
-  const allDone = players.every(pid => solved[pid] !== undefined);
-  if (!allDone) return;
+  if (isSolved || isExhausted) {
+    room.status = 'finished';
+    
+    // Notify Creator (if still connected)
+    if (room.creator) {
+      io.to(room.creator).emit('game-over', {
+        result: isSolved ? 'guesser_won' : 'creator_won',
+        word: word,
+        guesses: guesses.length,
+        isCreator: true
+      });
+    }
 
-  room.status = 'finished';
-
-  const p1 = players[0];
-  const p2 = players[1];
-  const p1Solved = solved[p1] === true;
-  const p2Solved = solved[p2] === true;
-
-  let winnerSocket = null;
-  if (p1Solved && p2Solved) {
-    const p1Count = guesses[p1].length;
-    const p2Count = guesses[p2].length;
-    winnerSocket = p1Count <= p2Count ? p1 : p2;
-    if (p1Count === p2Count) winnerSocket = null; // tie
-  } else if (p1Solved) {
-    winnerSocket = p1;
-  } else if (p2Solved) {
-    winnerSocket = p2;
+    // Notify Guesser
+    if (room.guesser) {
+      io.to(room.guesser).emit('game-over', {
+        result: isSolved ? 'win' : 'lose',
+        word: word,
+        guesses: guesses.length,
+        isCreator: false
+      });
+    }
   }
-
-  players.forEach(pid => {
-    const opponent = players.find(p => p !== pid);
-    io.to(pid).emit('game-over', {
-      result: winnerSocket === null ? 'tie' : winnerSocket === pid ? 'win' : 'lose',
-      word,
-      myGuesses: guesses[pid].length,
-      opponentGuesses: opponent ? guesses[opponent].length : 0,
-      mySolved: solved[pid] === true,
-      opponentSolved: opponent ? solved[opponent] === true : false
-    });
-  });
 }
 
 io.on('connection', (socket) => {
   console.log(`[+] Connected: ${socket.id}`);
 
-  // ── CREATE ROOM ──────────────────────────────────────────────────────────────
-  socket.on('create-room', ({ nickname }) => {
+  // ── CREATE ROOM (CREATOR) ────────────────────────────────────────────────────
+  socket.on('create-room', ({ customWord }) => {
+    const wordUpper = (customWord || '').toUpperCase().trim();
+    if (wordUpper.length !== 5 || !isValidWord(wordUpper)) {
+      socket.emit('create-error', { message: 'Invalid word. Must be a 5-letter English word.' });
+      return;
+    }
+
     let roomCode;
     do { roomCode = generateRoomCode(); } while (rooms.has(roomCode));
 
-    const word = getRandomWord();
     const room = {
       code: roomCode,
-      word,
-      players: [socket.id],
-      nicknames: { [socket.id]: nickname || 'Player 1' },
+      word: wordUpper,
+      creator: socket.id,
+      guesser: null,
       status: 'waiting',
-      guesses: { [socket.id]: [] },
-      solved: {},
-      rematchVotes: new Set(),
+      guesses: [],
+      solved: false,
       startTime: null
     };
 
@@ -139,12 +135,12 @@ io.on('connection', (socket) => {
     socket.join(roomCode);
     socket.roomCode = roomCode;
 
-    socket.emit('room-created', { roomCode, playerId: socket.id });
-    console.log(`[Room] Created: ${roomCode} by ${socket.id}`);
+    socket.emit('room-created', { roomCode, isCreator: true });
+    console.log(`[Room] Created: ${roomCode} by ${socket.id} (Word: ${wordUpper})`);
   });
 
-  // ── JOIN ROOM ────────────────────────────────────────────────────────────────
-  socket.on('join-room', ({ roomCode, nickname }) => {
+  // ── JOIN ROOM (GUESSER) ──────────────────────────────────────────────────────
+  socket.on('join-room', ({ roomCode }) => {
     const code = (roomCode || '').toUpperCase().trim();
     const room = rooms.get(code);
 
@@ -152,52 +148,45 @@ io.on('connection', (socket) => {
       socket.emit('join-error', { message: 'Room not found. Check the code and try again.' });
       return;
     }
-    if (room.status !== 'waiting') {
+    if (room.status !== 'waiting' && !room.guesser) {
       socket.emit('join-error', { message: 'That game has already started.' });
       return;
     }
-    if (room.players.length >= 2) {
-      socket.emit('join-error', { message: 'Room is full (max 2 players).' });
-      return;
-    }
-    if (room.players.includes(socket.id)) {
-      socket.emit('join-error', { message: 'You are already in this room.' });
+    if (room.guesser && room.guesser !== socket.id) {
+      socket.emit('join-error', { message: 'Someone is already guessing this word.' });
       return;
     }
 
-    room.players.push(socket.id);
-    room.nicknames[socket.id] = nickname || 'Player 2';
-    room.guesses[socket.id] = [];
-
+    room.guesser = socket.id;
     socket.join(code);
     socket.roomCode = code;
 
-    const p1 = room.players[0];
-    const p2 = socket.id;
-
-    // Tell both players who's who
     socket.emit('room-joined', {
       roomCode: code,
-      playerId: socket.id,
-      opponentName: room.nicknames[p1]
-    });
-    io.to(p1).emit('opponent-joined', {
-      opponentName: room.nicknames[p2]
+      isCreator: false
     });
 
-    console.log(`[Room] ${socket.id} joined ${code}`);
+    if (room.creator) {
+      io.to(room.creator).emit('guesser-joined');
+    }
 
-    // Start countdown
-    setTimeout(() => startCountdown(room), 500);
+    console.log(`[Room] ${socket.id} joined ${code} as guesser`);
+
+    // Start game immediately when guesser joins
+    if (room.status === 'waiting') {
+      room.status = 'playing';
+      room.startTime = Date.now();
+      io.to(code).emit('game-start');
+    }
   });
 
-  // ── SUBMIT GUESS ─────────────────────────────────────────────────────────────
+  // ── SUBMIT GUESS (GUESSER ONLY) ──────────────────────────────────────────────
   socket.on('submit-guess', ({ guess }) => {
     const roomCode = socket.roomCode;
     if (!roomCode) return;
     const room = rooms.get(roomCode);
     if (!room || room.status !== 'playing') return;
-    if (room.solved[socket.id] !== undefined) return; // already done
+    if (socket.id !== room.guesser) return; // Only guesser can guess
 
     const guessUpper = (guess || '').toUpperCase().trim();
     if (guessUpper.length !== 5) return;
@@ -208,48 +197,25 @@ io.on('connection', (socket) => {
     }
 
     const colors = calculateColors(guessUpper, room.word);
-    const rowIndex = room.guesses[socket.id].length;
-    room.guesses[socket.id].push({ guess: guessUpper, colors });
+    const rowIndex = room.guesses.length;
+    room.guesses.push({ guess: guessUpper, colors });
 
     const isSolved = colors.every(c => c === 'correct');
-    const isExhausted = room.guesses[socket.id].length >= 6;
+    if (isSolved) room.solved = true;
 
     // Full result to guesser (letters + colors)
     socket.emit('guess-result', { guess: guessUpper, colors, row: rowIndex, solved: isSolved });
 
-    // Opponent only sees colors (keeps it competitive)
-    socket.to(roomCode).emit('opponent-guess', { colors, row: rowIndex, solved: isSolved });
-
-    if (isSolved) {
-      room.solved[socket.id] = true;
-      checkGameOver(room);
-    } else if (isExhausted) {
-      room.solved[socket.id] = false;
-      checkGameOver(room);
+    // Live update to Creator (sees letters + colors)
+    if (room.creator) {
+      io.to(room.creator).emit('opponent-guess', { guess: guessUpper, colors, row: rowIndex, solved: isSolved });
     }
+
+    checkGameOver(room);
   });
 
-  // ── REMATCH ──────────────────────────────────────────────────────────────────
-  socket.on('request-rematch', () => {
-    const roomCode = socket.roomCode;
-    if (!roomCode) return;
-    const room = rooms.get(roomCode);
-    if (!room || room.status !== 'finished') return;
-
-    room.rematchVotes.add(socket.id);
-    socket.to(roomCode).emit('rematch-vote');
-
-    if (room.rematchVotes.size >= 2) {
-      // Reset and start again
-      room.word = getRandomWord();
-      room.status = 'waiting';
-      room.guesses = {};
-      room.solved = {};
-      room.rematchVotes = new Set();
-      room.players.forEach(pid => { room.guesses[pid] = []; });
-      setTimeout(() => startCountdown(room), 500);
-    }
-  });
+  // ── REMATCH (NOT USED IN ASYMMETRIC MODE) ────────────────────────────────────
+  // A rematch would mean a new word is needed, so players just create a new room.
 
   // ── DISCONNECT ───────────────────────────────────────────────────────────────
   socket.on('disconnect', () => {

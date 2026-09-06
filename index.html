@@ -31,30 +31,31 @@
           <div class="logo-tile correct">D</div>
           <div class="logo-tile present">L</div>
         </div>
-        <h1 class="logo-title">Wordle <span class="logo-accent">Duel</span></h1>
-        <p class="logo-subtitle">Race your friend to guess the word first</p>
+        <h1 class="logo-title">Wordle <span class="logo-accent">Challenge</span></h1>
+        <p class="logo-subtitle">Create a custom word and challenge your friend to guess it!</p>
       </div>
 
       <div class="lobby-card glass">
         <div class="nickname-group">
-          <label for="nickname-input" class="input-label">Your nickname</label>
+          <label for="word-input" class="input-label">Enter a 5-letter word</label>
           <input
-            id="nickname-input"
+            id="word-input"
             type="text"
-            class="text-input"
-            placeholder="e.g. WordMaster"
-            maxlength="20"
+            class="text-input code-input"
+            placeholder="e.g. TRAIN"
+            maxlength="5"
             autocomplete="off"
+            spellcheck="false"
           />
         </div>
 
         <div class="lobby-actions">
           <button id="btn-create" class="btn btn-primary btn-large">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-            Create Room
+            Create Challenge
           </button>
 
-          <div class="divider"><span>or</span></div>
+          <div class="divider"><span>or play</span></div>
 
           <div class="join-row">
             <input
@@ -89,8 +90,8 @@
         <div class="pulse-ring pulse-ring-2"></div>
         <span class="waiting-emoji">⚔️</span>
       </div>
-      <h2 class="waiting-title">Waiting for opponent…</h2>
-      <p class="waiting-sub">Share this room code with your friend</p>
+      <h2 class="waiting-title">Waiting for friend to join…</h2>
+      <p class="waiting-sub">Share this room code with them so they can try to guess your word</p>
 
       <div class="room-code-display">
         <span id="display-room-code" class="room-code-text">------</span>
@@ -106,12 +107,7 @@
   <!-- ══════════════════════════════════════════
        SCREEN 3: COUNTDOWN
   ══════════════════════════════════════════ -->
-  <div id="screen-countdown" class="screen">
-    <div class="countdown-content">
-      <p class="countdown-label">Game starts in</p>
-      <div id="countdown-number" class="countdown-number">3</div>
-    </div>
-  </div>
+  <!-- Countdown is removed for Asymmetric Mode as the game starts instantly for Guesser -->
 
   <!-- ══════════════════════════════════════════
        SCREEN 4: GAME
@@ -121,46 +117,30 @@
     <!-- Header -->
     <header class="game-header">
       <div class="header-logo">
-        <span class="header-logo-text">Wordle <span class="logo-accent">Duel</span></span>
+        <span class="header-logo-text">Wordle <span class="logo-accent">Challenge</span></span>
       </div>
-      <div class="header-timer" id="game-timer">0:00</div>
       <div class="header-room">
         <span class="room-badge" id="header-room-code">Room: ------</span>
       </div>
     </header>
 
     <!-- Boards -->
-    <main class="game-arena">
-      <!-- My Board -->
-      <section class="board-panel" id="my-panel">
-        <div class="panel-header">
+    <main class="game-arena single-board-layout">
+      <!-- Main Board -->
+      <section class="board-panel active-panel" id="main-panel">
+        <div class="panel-header" id="panel-header">
           <div class="player-tag you">
             <div class="player-dot"></div>
-            <span id="my-name">You</span>
+            <span id="role-text">You are guessing</span>
           </div>
-          <div class="guess-counter" id="my-guess-count">0 / 6</div>
+          <div class="guess-counter" id="guess-count">0 / 5</div>
         </div>
-        <div class="board" id="my-board" role="grid" aria-label="Your guesses"></div>
-      </section>
-
-      <!-- VS Divider -->
-      <div class="vs-divider">
-        <div class="vs-line"></div>
-        <span class="vs-text">VS</span>
-        <div class="vs-line"></div>
-      </div>
-
-      <!-- Opponent Board -->
-      <section class="board-panel" id="opponent-panel">
-        <div class="panel-header">
-          <div class="player-tag opponent">
-            <div class="player-dot"></div>
-            <span id="opponent-name">Opponent</span>
-          </div>
-          <div class="guess-counter" id="opp-guess-count">0 / 6</div>
+        <div class="board" id="main-board" role="grid" aria-label="Wordle Guesses"></div>
+        
+        <!-- Overlay for Creator -->
+        <div id="creator-overlay" class="opp-overlay" style="display: none;">
+           Watching live <span class="live-dot"></span>
         </div>
-        <div class="board" id="opp-board" role="grid" aria-label="Opponent guesses"></div>
-        <div class="opp-overlay">Watching live <span class="live-dot"></span></div>
       </section>
     </main>
 
@@ -222,25 +202,17 @@
         <div id="result-word" class="result-word"></div>
       </div>
 
-      <div class="result-stats">
+      <div class="result-stats single-stat">
         <div class="stat-box">
-          <span class="stat-value" id="stat-my-guesses">—</span>
-          <span class="stat-label">Your guesses</span>
-        </div>
-        <div class="stat-box">
-          <span class="stat-value" id="stat-opp-guesses">—</span>
-          <span class="stat-label">Their guesses</span>
-        </div>
-        <div class="stat-box">
-          <span class="stat-value" id="stat-time">—</span>
-          <span class="stat-label">Your time</span>
+          <span class="stat-value" id="stat-guesses">—</span>
+          <span class="stat-label">Guesses taken</span>
         </div>
       </div>
 
       <div class="result-actions">
-        <button id="btn-rematch" class="btn btn-primary">
+        <button id="btn-rematch" class="btn btn-primary" onclick="window.location.reload()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.05"/></svg>
-          Rematch
+          Play Again
         </button>
         <button id="btn-share-result" class="btn btn-secondary">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>

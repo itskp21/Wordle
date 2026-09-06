@@ -72,23 +72,28 @@ function connectSocket() {
   socket.on('connect_error', () => showToast('Connection error — is the server running?', 'error', 4000));
 
   // ── ROOM EVENTS ──────────────────────────────────────────────
-  socket.on('room-created', ({ roomCode }) => {
+  socket.on('room-created', ({ roomCode, isCreator }) => {
     state.roomCode = roomCode;
+    state.isCreator = isCreator;
     $('display-room-code').textContent = roomCode;
     $('header-room-code').textContent = `Room: ${roomCode}`;
     updateShareURL(roomCode);
     showScreen('waiting');
   });
 
-  socket.on('room-joined', ({ roomCode, opponentName }) => {
+  socket.on('room-joined', ({ roomCode, isCreator }) => {
     state.roomCode = roomCode;
-    state.oppName = opponentName || 'Opponent';
+    state.isCreator = isCreator;
     $('header-room-code').textContent = `Room: ${roomCode}`;
   });
 
-  socket.on('opponent-joined', ({ opponentName }) => {
-    state.oppName = opponentName || 'Opponent';
-    showToast(`${state.oppName} joined!`, 'success');
+  socket.on('guesser-joined', () => {
+    showToast(`Friend joined! Get ready!`, 'success');
+  });
+
+  socket.on('create-error', ({ message }) => {
+    $('join-error').textContent = message;
+    setTimeout(() => { $('join-error').textContent = ''; }, 4000);
   });
 
   socket.on('join-error', ({ message }) => {
@@ -96,32 +101,19 @@ function connectSocket() {
     setTimeout(() => { $('join-error').textContent = ''; }, 4000);
   });
 
-  // ── COUNTDOWN ────────────────────────────────────────────────
-  socket.on('countdown', ({ count }) => {
-    showScreen('countdown');
-    const el = $('countdown-number');
-    el.textContent = count;
-    // Re-trigger animation
-    el.style.animation = 'none';
-    void el.offsetWidth;
-    el.style.animation = '';
-  });
-
   socket.on('game-start', () => {
     initGame();
     showScreen('game');
     state.startTime = Date.now();
-    startTimer();
   });
 
   // ── GAMEPLAY EVENTS ───────────────────────────────────────────
   socket.on('guess-result', ({ guess, colors, row, solved }) => {
-    revealRow('my-board', row, guess.split(''), colors, () => {
+    revealRow('main-board', row, guess.split(''), colors, () => {
       updateKeyboard(guess, colors);
       state.myGuessColors.push(colors);
-      $('my-guess-count').textContent = `${row + 1} / 6`;
+      $('guess-count').textContent = `${row + 1} / 5`;
       if (solved) {
-        stopTimer();
         state.finishTime = (Date.now() - state.startTime);
         showToast('🎉 You got it!', 'success', 1500);
       }
@@ -133,34 +125,22 @@ function connectSocket() {
     showToast('Not in word list', 'error', 1500);
   });
 
-  socket.on('opponent-guess', ({ colors, row, solved }) => {
-    // Show colored tiles on opponent board (no letters)
-    revealRow('opp-board', row, ['', '', '', '', ''], colors, () => {
-      $('opp-guess-count').textContent = `${row + 1} / 6`;
-      if (solved) showToast(`${state.oppName} solved it!`, 'info', 1500);
+  socket.on('opponent-guess', ({ guess, colors, row, solved }) => {
+    // Creator sees the letters and colors live
+    revealRow('main-board', row, guess.split(''), colors, () => {
+      $('guess-count').textContent = `${row + 1} / 5`;
+      if (solved) showToast(`They solved it!`, 'info', 1500);
     });
   });
 
   // ── GAME OVER ─────────────────────────────────────────────────
-  socket.on('game-over', ({ result, word, myGuesses, opponentGuesses, mySolved }) => {
-    stopTimer();
-    setTimeout(() => showResult(result, word, myGuesses, opponentGuesses, mySolved), 600);
-  });
-
-  // ── REMATCH ───────────────────────────────────────────────────
-  socket.on('rematch-vote', () => {
-    $('rematch-status').textContent = `${state.oppName} wants a rematch!`;
-  });
-
-  socket.on('countdown', ({ count }) => {
-    // Already handled above — this resets everything
-    resetGame();
+  socket.on('game-over', ({ result, word, guesses, isCreator }) => {
+    setTimeout(() => showResult(result, word, guesses, isCreator), 1200);
   });
 
   // ── DISCONNECT ────────────────────────────────────────────────
   socket.on('opponent-disconnected', () => {
-    stopTimer();
-    showToast('Opponent disconnected 😢', 'error', 5000);
+    showToast('The other player disconnected 😢', 'error', 5000);
     setTimeout(() => {
       showScreen('lobby');
       resetAll();
@@ -179,7 +159,8 @@ function updateShareURL(roomCode) {
 function createBoard(boardId) {
   const board = $(boardId);
   board.innerHTML = '';
-  for (let row = 0; row < 6; row++) {
+  // 5 Rows (chances), 5 Columns (letters)
+  for (let row = 0; row < 5; row++) {
     for (let col = 0; col < 5; col++) {
       const tile = document.createElement('div');
       tile.className = 'tile';
@@ -191,20 +172,27 @@ function createBoard(boardId) {
 }
 
 function initGame() {
-  createBoard('my-board');
-  createBoard('opp-board');
+  createBoard('main-board');
   state.currentGuess = '';
   state.myRow = 0;
-  state.oppRow = 0;
   state.gameOver = false;
   state.keyStates = {};
   state.myGuessColors = [];
   state.finishTime = null;
 
-  $('my-name').textContent = state.myName;
-  $('opponent-name').textContent = state.oppName;
-  $('my-guess-count').textContent = '0 / 6';
-  $('opp-guess-count').textContent = '0 / 6';
+  $('guess-count').textContent = '0 / 5';
+
+  if (state.isCreator) {
+    $('role-text').textContent = 'You are watching';
+    $('creator-overlay').style.display = 'flex';
+    $('keyboard').style.pointerEvents = 'none';
+    $('keyboard').style.opacity = '0.5';
+  } else {
+    $('role-text').textContent = 'You are guessing';
+    $('creator-overlay').style.display = 'none';
+    $('keyboard').style.pointerEvents = 'auto';
+    $('keyboard').style.opacity = '1';
+  }
 
   // Reset keyboard
   document.querySelectorAll('.key[data-key]').forEach(key => {
@@ -230,9 +218,10 @@ function revealRow(boardId, row, letters, colors, onComplete) {
 
 // ── CURRENT GUESS RENDERING ────────────────────────────────────
 function renderCurrentGuess() {
+  if (state.isCreator) return;
   const row = state.myRow;
   for (let col = 0; col < 5; col++) {
-    const tile = $(`my-board-tile-${row}-${col}`);
+    const tile = $(`main-board-tile-${row}-${col}`);
     if (!tile) return;
     const letter = state.currentGuess[col] || '';
     tile.textContent = letter;
@@ -242,19 +231,20 @@ function renderCurrentGuess() {
 }
 
 function clearCurrentGuessRow() {
+  if (state.isCreator) return;
   const row = state.myRow;
   for (let col = 0; col < 5; col++) {
-    const tile = $(`my-board-tile-${row}-${col}`);
+    const tile = $(`main-board-tile-${row}-${col}`);
     if (tile) { tile.textContent = ''; tile.dataset.state = 'empty'; }
   }
 }
 
 // ── SHAKE ──────────────────────────────────────────────────────
 function shakeCurrentRow() {
-  const board = $('my-board');
+  if (state.isCreator) return;
   // Mark tiles in current row for shake
   for (let col = 0; col < 5; col++) {
-    const tile = $(`my-board-tile-${state.myRow}-${col}`);
+    const tile = $(`main-board-tile-${state.myRow}-${col}`);
     if (!tile) continue;
     tile.style.animation = 'none';
     void tile.offsetWidth;
@@ -295,7 +285,7 @@ function submitGuess() {
 
 // ── KEYBOARD INPUT ─────────────────────────────────────────────
 function handleKey(key) {
-  if (state.gameOver) return;
+  if (state.gameOver || state.isCreator) return;
   if (!state.startTime) return; // game not started
 
   if (key === 'ENTER') {
@@ -332,35 +322,22 @@ document.getElementById('keyboard').addEventListener('click', e => {
 });
 
 // ── TIMER ──────────────────────────────────────────────────────
-function startTimer() {
-  const el = $('game-timer');
-  state.timerInterval = setInterval(() => {
-    const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
-    const m = Math.floor(elapsed / 60);
-    const s = elapsed % 60;
-    el.textContent = `${m}:${s.toString().padStart(2, '0')}`;
-  }, 500);
-}
-
-function stopTimer() {
-  clearInterval(state.timerInterval);
-  state.timerInterval = null;
-  state.gameOver = true;
-}
+// Removed: Timer is not needed in asymmetric challenge mode
 
 // ── RESULT SCREEN ──────────────────────────────────────────────
-function showResult(result, word, myGuesses, opponentGuesses, mySolved) {
+function showResult(result, word, guesses, isCreator) {
   const resultTitle  = $('result-title');
   const resultIcon   = $('result-icon');
   const resultSub    = $('result-subtitle');
 
   const messages = {
-    win:  { icon: '🏆', title: 'You Won!', sub: 'Outstanding! You cracked it first!', cls: 'win' },
-    lose: { icon: '😔', title: 'You Lost', sub: `Better luck next time! ${state.oppName} was faster.`, cls: 'lose' },
-    tie:  { icon: '🤝', title: "It's a Tie!", sub: 'Same number of guesses — so close!', cls: 'tie' },
+    win:          { icon: '🏆', title: 'You Won!', sub: 'Outstanding! You cracked it!', cls: 'win' },
+    lose:         { icon: '😔', title: 'You Lost', sub: 'Better luck next time!', cls: 'lose' },
+    creator_won:  { icon: '🏆', title: 'They failed!', sub: 'Your friend couldn\'t guess your word.', cls: 'win' },
+    guesser_won:  { icon: '😔', title: 'They got it!', sub: 'Your friend guessed your word.', cls: 'lose' },
   };
 
-  const r = messages[result] || messages.tie;
+  const r = messages[result] || messages.lose;
   resultIcon.textContent   = r.icon;
   resultTitle.textContent  = r.title;
   resultTitle.className    = `result-title ${r.cls}`;
@@ -377,28 +354,22 @@ function showResult(result, word, myGuesses, opponentGuesses, mySolved) {
   });
 
   // Stats
-  $('stat-my-guesses').textContent  = mySolved ? myGuesses : '✗';
-  $('stat-opp-guesses').textContent = opponentGuesses || '—';
-  const elapsed = state.finishTime || (Date.now() - state.startTime);
-  const m = Math.floor(elapsed / 60000);
-  const s = Math.floor((elapsed % 60000) / 1000);
-  $('stat-time').textContent = `${m}:${s.toString().padStart(2, '0')}`;
+  $('stat-guesses').textContent = guesses || '—';
 
   $('rematch-status').textContent = '';
   showScreen('result');
 
-  if (result === 'win') fireConfetti();
+  if (result === 'win' || result === 'creator_won') fireConfetti();
 }
 
 // ── LOBBY ACTIONS ──────────────────────────────────────────────
-function getNickname() {
-  return $('nickname-input').value.trim() || 'Player';
-}
-
 $('btn-create').addEventListener('click', () => {
-  const nickname = getNickname();
-  state.myName = nickname;
-  state.socket.emit('create-room', { nickname });
+  const customWord = $('word-input').value.trim();
+  if (customWord.length !== 5) {
+    showToast('Word must be 5 letters!', 'error');
+    return;
+  }
+  state.socket.emit('create-room', { customWord });
 });
 
 $('btn-join').addEventListener('click', joinRoom);
@@ -415,9 +386,7 @@ function joinRoom() {
     $('join-error').textContent = 'Enter a valid room code.';
     return;
   }
-  const nickname = getNickname();
-  state.myName = nickname;
-  state.socket.emit('join-room', { roomCode: code, nickname });
+  state.socket.emit('join-room', { roomCode: code });
 }
 
 // ── COPY LINK ──────────────────────────────────────────────────
